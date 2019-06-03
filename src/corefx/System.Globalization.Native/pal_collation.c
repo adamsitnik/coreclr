@@ -42,7 +42,6 @@ typedef struct { int32_t key; UCollator* UCollator; } TCollatorMap;
  */
 struct SortHandle
 {
-    pthread_mutex_t collatorsLockObject;
     UCollator* collatorsPerOption[CompareOptionsMask + 1];
 };
 
@@ -342,12 +341,6 @@ void CreateSortHandle(SortHandle** ppSortHandle)
     }
 
     memset(*ppSortHandle, 0, sizeof(SortHandle));
-
-    int result = pthread_mutex_init(&(*ppSortHandle)->collatorsLockObject, NULL);
-    if (result != 0)
-    {
-        assert(FALSE && "Unexpected pthread_mutex_init return value.");
-    }
 }
 
 ResultCode GlobalizationNative_GetSortHandle(const char* lpLocaleName, SortHandle** ppSortHandle)
@@ -366,7 +359,6 @@ ResultCode GlobalizationNative_GetSortHandle(const char* lpLocaleName, SortHandl
 
     if (U_FAILURE(err))
     {
-        pthread_mutex_destroy(&(*ppSortHandle)->collatorsLockObject);
         free(*ppSortHandle);
         (*ppSortHandle) = NULL;
     }
@@ -385,8 +377,6 @@ void GlobalizationNative_CloseSortHandle(SortHandle* pSortHandle)
         }
     }
 
-    pthread_mutex_destroy(&pSortHandle->collatorsLockObject);
-
     free(pSortHandle);
 }
 
@@ -399,12 +389,6 @@ const UCollator* GetCollatorFromSortHandle(SortHandle* pSortHandle, int32_t opti
     }
     else
     {
-        int lockResult = pthread_mutex_lock(&pSortHandle->collatorsLockObject);
-        if (lockResult != 0)
-        {
-            assert(FALSE && "Unexpected pthread_mutex_lock return value.");
-        }
-
         options &= CompareOptionsMask;
         pCollator = pSortHandle->collatorsPerOption[options];
         if (pCollator == NULL)
@@ -412,8 +396,6 @@ const UCollator* GetCollatorFromSortHandle(SortHandle* pSortHandle, int32_t opti
             pCollator = CloneCollatorWithOptions(pSortHandle->collatorsPerOption[0], options, pErr);
             pSortHandle->collatorsPerOption[options] = pCollator;
         }
-
-        pthread_mutex_unlock(&pSortHandle->collatorsLockObject);
     }
 
     return pCollator;
