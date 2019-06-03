@@ -21,22 +21,21 @@ namespace System.Globalization
         [NonSerialized]
         private bool _isAsciiEqualityOrdinal;
 
-
         private Interop.Globalization.SafeSortHandle GetSortHandle()
         {
-            if (ts_sortHandle == null || !GlobalizationMode.Invariant)
+            if (ts_sortHandle == null && !GlobalizationMode.Invariant)
             {
                 Interop.Globalization.ResultCode resultCode = Interop.Globalization.GetSortHandle(GetNullTerminatedUtf8String(_sortName), out ts_sortHandle);
                 if (resultCode != Interop.Globalization.ResultCode.Success)
                 {
-                    OnGetSortHandleFailure();
+                    OnGetSortHandleFailure(resultCode);
                 }
             }
 
             return ts_sortHandle;
         }
 
-        private void OnGetSortHandleFailure()
+        private void OnGetSortHandleFailure(Interop.Globalization.ResultCode resultCode)
         {
             ts_sortHandle.Dispose();
 
