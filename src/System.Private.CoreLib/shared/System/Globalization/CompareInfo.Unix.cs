@@ -32,7 +32,7 @@ namespace System.Globalization
                 }
             }
 
-            return ts_sortHandle;
+            return ts_sortHandle!;
         }
 
         private void OnGetSortHandleFailure(Interop.Globalization.ResultCode resultCode)
