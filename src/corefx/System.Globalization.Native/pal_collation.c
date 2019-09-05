@@ -587,6 +587,56 @@ int32_t GlobalizationNative_IndexOfOrdinalIgnoreCase(
     return result;
 }
 
+static int32_t GetMask(UColAttributeValue strength)
+{
+    switch (strength)
+    {
+        case UCOL_PRIMARY:
+            return 0xFFFF0000;
+        case UCOL_SECONDARY:
+            return 0xFFFFFF00;
+        default:
+            return 0xFFFFFFFF;
+    }
+}
+
+static int32_t StartsWith(UCollationElements* pPatternIterator, UCollationElements* pSourceIterator, int32_t mask)
+{
+    UErrorCode err = U_ZERO_ERROR;
+
+    // sometimes we can hit an ignorable character and we can not move forward the other iterator in next loop iteration:
+    // example:
+    // source:  "Start's"
+    // pattern: "Starts"
+    // when we hit ' the pattern iterator should not move to the next character
+    int32_t movePattern = TRUE, moveSource = TRUE;
+    int32_t patternItem = 0, sourceItem = 0;
+
+    while (true)
+    {
+        if (movePattern) patternItem = ucol_next(pPatternIterator, &err) & mask;
+        if (moveSource) sourceItem = ucol_next(pSourceIterator, &err) & mask;
+        movePattern = moveSource = TRUE;
+
+        if (patternItem == (UCOL_NULLORDER & mask)) // end of pattern - the string starts with pattern
+        {
+            return TRUE;
+        }
+        else if (sourceItem == 0) // ignorable char in source string
+        {
+            movePattern = FALSE;
+        }
+        else if (patternItem == 0) // ignorable char in pattern string
+        {
+            moveSource = FALSE;
+        }
+        else if (patternItem != sourceItem)
+        {
+            return FALSE;
+        }
+    }
+}
+
 /*
  Return value is a "Win32 BOOL" (1 = true, 0 = false)
  */
@@ -600,30 +650,24 @@ int32_t GlobalizationNative_StartsWith(
 {
     int32_t result = FALSE;
     UErrorCode err = U_ZERO_ERROR;
-    const UCollator* pColl = GetCollatorFromSortHandle(pSortHandle, options, &err);
 
+    const UCollator* pColl = GetCollatorFromSortHandle(pSortHandle, options, &err);
     if (U_SUCCESS(err))
     {
-        int32_t searchedTextLength = cwTargetLength < cwSourceLength ? cwTargetLength : cwSourceLength;
-        UStringSearch* pSearch = usearch_openFromCollator(lpTarget, cwTargetLength, lpSource, searchedTextLength, pColl, NULL, &err);
-        int32_t idx = USEARCH_DONE;
-
+        UCollationElements* pPatternIterator = ucol_openElements(pColl, lpTarget, cwTargetLength, &err);
         if (U_SUCCESS(err))
         {
-            idx = usearch_first(pSearch, &err);
-            if (idx != USEARCH_DONE)
+            UCollationElements* pSourceIterator = ucol_openElements(pColl, lpSource, cwSourceLength, &err);
+            if (U_SUCCESS(err))
             {
-                if (idx == 0)
-                {
-                    result = TRUE;
-                }
-                else
-                {
-                    result = CanIgnoreAllCollationElements(pColl, lpSource, idx);
-                }
+                UColAttributeValue strength = ucol_getStrength(pColl);
+
+                result = StartsWith(pPatternIterator, pSourceIterator, GetMask(strength));
+
+                ucol_closeElements(pSourceIterator);
             }
 
-            usearch_close(pSearch);
+            ucol_closeElements(pPatternIterator);
         }
     }
 
